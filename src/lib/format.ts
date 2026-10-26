@@ -56,6 +56,18 @@ function trim(n: number): string {
   return n >= 10 ? String(Math.round(n)) : String(Math.round(n * 100) / 100);
 }
 
+/** Format an area with its ORIGINAL unit preserved (never silently converted). */
+const UNIT_LABEL: Record<string, string> = {
+  SQFT: "sqft", SQYD: "sqyd", SQUARE_METER: "sqm", GUNTHA: "guntha", BIGHA: "bigha", HECTARE: "hectare", ACRE: "acre",
+};
+export function formatArea(value?: number | null, unit?: string | null, kind?: string): string | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  const u = UNIT_LABEL[unit ?? "SQFT"] ?? "sqft";
+  const v = value >= 1000 ? Math.round(value).toLocaleString("en-IN") : String(Math.round(value * 100) / 100);
+  const prefix = kind === "carpet" ? "" : kind ? `${kind} ` : "";
+  return `${prefix}${v} ${u}`;
+}
+
 export function formatPsf(psf?: number | null): string {
   if (psf == null) return "—";
   return `₹${Math.round(psf).toLocaleString("en-IN")}/sqft`;
@@ -110,4 +122,22 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
     Math.sin(dLat / 2) ** 2 +
     Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Relative "x ago" timestamp for admin/UI display. */
+export function timeAgo(iso: string | Date): string {
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  if (isNaN(d.getTime())) return "—";
+  const s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`;
+  const days = Math.floor(h / 24); if (days < 30) return `${days}d ago`;
+  const mo = Math.floor(days / 30); if (mo < 12) return `${mo}mo ago`;
+  return `${Math.floor(mo / 12)}y ago`;
+}
+
+/** Convenience alias used across pages. */
+export function formatINR(price?: number | null): string | null {
+  return price == null ? null : formatPriceINR(price);
 }

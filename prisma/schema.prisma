@@ -1,15 +1,16 @@
 // Indore Property Finder — Prisma Schema
-// Production target: PostgreSQL (set DATABASE_URL to a postgresql:// connection string).
-// Local development without PostgreSQL: SQLite fallback (see docs/DATABASE.md).
-// NOTE: SQLite does not support native enums or arrays; we use String fields with
-// application-level Zod validation and JSON-string list fields for portability.
+// Target: PostgreSQL (Vercel Postgres / Neon / Supabase). DATABASE_URL must be a
+// postgresql:// connection string. For local development without PostgreSQL, switch
+// the datasource provider to "sqlite" temporarily (schema is portable: String fields
+// with application-level Zod validation instead of native enums/arrays).
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x"] // required for Vercel serverless (musl)
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -112,7 +113,7 @@ model PropertySource {
   property     Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   connector    SourceConnector @relation(fields: [connectorId], references: [id])
 
-  @@unique([connectorId, externalId])
+  @@unique([connectorId, canonicalUrl])
   @@index([propertyId])
   @@index([canonicalUrl])
 }

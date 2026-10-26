@@ -25,7 +25,7 @@ const TX_LABEL: Record<string, string> = { SALE: "For Sale", RENT: "For Rent", C
 // Honest card: missing price renders "Price not available" — never a fabricated number.
 export default function PropertyCard({ p }: { p: CardProperty }) {
   return (
-    <Link href={`/property/${p.id}`} className="card block overflow-hidden transition hover:shadow-md">
+    <Link href={`/properties/${p.id}`} className="card block overflow-hidden transition hover:shadow-md">
       {p.imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={p.imageUrl} alt="" className="h-40 w-full object-cover" loading="lazy" />

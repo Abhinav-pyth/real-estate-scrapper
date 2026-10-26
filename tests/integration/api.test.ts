@@ -7,10 +7,16 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const BASE = process.env.TEST_BASE_URL || ""; // set when testing a live server; unit-of-route fallback below uses direct lib calls
-const prisma = new PrismaClient();
+
+// DB-level tests require a reachable DATABASE_URL (local SQLite dev db or Postgres).
+// On Vercel/CI builds without a provisioned test DB they are skipped gracefully.
+const HAS_DB = !!process.env.DATABASE_URL;
+let prisma: PrismaClient | undefined;
 
 beforeAll(async () => {
-  // ensure schema exists in test db (migrate deploy is run by the test script beforehand)
+  if (!HAS_DB) return;
+  prisma = new PrismaClient();
+  // ensure schema exists (db push / migrate deploy is run by the test script beforehand)
   await prisma.$queryRaw`SELECT 1`;
 });
 
@@ -88,7 +94,7 @@ describe.skipIf(!BASE)("integration: HTTP API (live server)", () => {
   });
 });
 
-describe("integration: DB pipeline (direct)", () => {
+describe.skipIf(!HAS_DB)("integration: DB pipeline (direct)", () => {
   it("saveListing is idempotent on re-import (upsert by connector+URL)", async () => {
     const { importCsvText } = await import("@/lib/csv");
     const csv = [
@@ -120,9 +126,9 @@ describe("integration: DB pipeline (direct)", () => {
     const r2 = await saveListing({ ...base, price: 4800000 } as any);
     expect(["NEW", "UNCHANGED", "UPDATED"].includes(r1.status)).toBe(true);
     expect(r2.status).toBe("PRICE_CHANGED");
-    const prop = await prisma.property.findFirst({ where: { sources: { some: { canonicalUrl: "https://t.example/price-hist" } } } });
+    const prop = await prisma!.property.findFirst({ where: { sources: { some: { canonicalUrl: "https://t.example/price-hist" } } } });
     expect(prop?.price).toBe(4800000);
-    const obsCount = await prisma.propertyObservation.count({ where: { propertyId: prop!.id } });
+    const obsCount = await prisma!.propertyObservation.count({ where: { propertyId: prop!.id } });
     expect(obsCount).toBeGreaterThanOrEqual(2);
   });
 

@@ -28,6 +28,19 @@ export const COORD_PRECISION = ["EXACT", "LOCALITY_APPROXIMATE", "NONE"] as cons
 export const AVAILABILITY = ["ACTIVE", "STALE", "UNAVAILABLE_AT_SOURCE", "REMOVED_BY_SOURCE", "PENDING_VERIFICATION"] as const;
 export const VERIFICATION = ["UNVERIFIED", "METADATA_CHECKED", "VERIFIED"] as const;
 
+// ---------- Shared UI/geo constants ----------
+
+/** Indore city centroid — from OpenStreetMap/Nominatim, not invented. */
+export const INDORE_CENTER = { lat: 22.7196, lng: 75.8577 };
+
+/** Locality record shape passed to client components (serializable). */
+export interface Locality {
+  slug: string;
+  name: string;
+  centerLat: number | null;
+  centerLng: number | null;
+}
+
 // ---------- Normalized listing (common schema across all sources) ----------
 
 export const normalizedListingSchema = z.object({

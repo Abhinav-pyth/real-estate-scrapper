@@ -6,6 +6,33 @@ export function ok<T>(data: T, init?: ResponseInit) {
   return NextResponse.json({ success: true, data }, { ...init, headers: { "Cache-Control": "no-store", ...(init?.headers || {}) } });
 }
 
+// ---------- Route helpers shared by pages & API ----------
+
+/** Redirect a URLSearchParams-style object into /search with normalized keys. */
+export function toSearchUrl(params: Record<string, string | number | null | undefined>): string {
+  const map: Record<string, string> = {
+    q: "q", locality: "locality", tx: "transactionType", type: "propertyType",
+    minPrice: "minPrice", maxPrice: "maxPrice", beds: "bedrooms", baths: "bathrooms",
+    furnishing: "furnishing", construction: "constructionStatus", source: "source",
+    sort: "sort", page: "page", minArea: "minCarpetArea", hasCoordinates: "hasCoordinates",
+    hasImages: "hasImages", priceReduced: "priceReduced", gatedCommunity: "gatedCommunity",
+    parking: "parking", lift: "lift", incomplete: "incomplete", verified: "verified",
+  };
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v == null || v === "") continue;
+    sp.set(map[k] ?? k, String(v));
+  }
+  const s = sp.toString();
+  return s ? `/search?${s}` : "/search";
+}
+
+/** Basic client-ip extraction for audit logging. */
+export function requestIp(req: Request): string | undefined {
+  const fwd = req.headers.get("x-forwarded-for");
+  return fwd ? fwd.split(",")[0].trim() : undefined;
+}
+
 export function err(status: number, code: string, message: string, details?: unknown) {
   return NextResponse.json(
     { success: false, error: { code, message, ...(details != null && !config.isProduction ? { details } : {}) } },

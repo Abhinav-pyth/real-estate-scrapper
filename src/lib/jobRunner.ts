@@ -22,7 +22,26 @@ export interface JobResult {
   lastError?: string;
 }
 
+/**
+ * Create a ScrapingJob for a connector and run it. Used by admin manual-sync and the worker.
+ */
+export async function createAndRunSyncJob(connectorId: string, triggeredBy = "SYSTEM"): Promise<JobResult> {
+  const connector = await prisma.sourceConnector.findUnique({ where: { id: connectorId } });
+  if (!connector) throw new Error("Connector not found: " + connectorId);
+  const job = await prisma.scrapingJob.create({
+    data: { connectorId, status: "QUEUED", triggeredBy, paramsJson: "{}" },
+  });
+  return executeJob(job.id);
+}
+
+/**
+ * Run an existing ScrapingJob row (also used for admin "retry failed job").
+ */
 export async function runSyncJob(jobId: string): Promise<JobResult> {
+  return executeJob(jobId);
+}
+
+async function executeJob(jobId: string): Promise<JobResult> {
   const job = await prisma.scrapingJob.findUnique({ where: { id: jobId }, include: { connector: true } });
   if (!job) throw new Error("Job not found: " + jobId);
   const connectorKey = job.connector.key;
@@ -116,3 +135,8 @@ export async function runSyncJob(jobId: string): Promise<JobResult> {
 
 function safeObj(s: string): Record<string, unknown> { try { return JSON.parse(s) as Record<string, unknown>; } catch { return {}; } }
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+
+/** Mark long-unchecked ACTIVE listings STALE (state model — never deletes). Returns count. */
+export async function markStaleListings(): Promise<number> {
+  return applyStalenessPolicy();
+}

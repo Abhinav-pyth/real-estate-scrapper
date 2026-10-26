@@ -74,7 +74,7 @@ export default function MapExplorer() {
            <span style="font-size:11px;color:${m.coordPrecision === "EXACT" ? "#16a34a" : "#d97706"}">
              ${m.coordPrecision === "EXACT" ? "Exact location" : "Approximate area"}
            </span><br/>
-           <a href="/property/${m.id}" style="color:#1f63c4;font-weight:600">View listing →</a>
+           <a href="/properties/${m.id}" style="color:#1f63c4;font-weight:600">View listing →</a>
          </div>`
       );
       layer.addLayer(circle);
