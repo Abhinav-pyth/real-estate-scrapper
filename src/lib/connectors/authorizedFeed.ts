@@ -94,8 +94,6 @@ export class AuthorizedFeedConnector implements SourceConnector {
         gatedCommunity: p.gatedCommunity ?? null,
         sourcePublishedAt: p.publishedAt ? new Date(String(p.publishedAt)) : null,
       };
-      // recompute PSF locally rather than trusting feed values
-      listing.pricePerSqFt = undefined;
       return listing;
     } catch {
       return null;
@@ -105,9 +103,7 @@ export class AuthorizedFeedConnector implements SourceConnector {
   validateListing(listing: NormalizedListing) {
     const parsed = normalizedListingSchema.safeParse(listing);
     if (parsed.success) {
-      // attach computed psf after validation
-      const psf = computePricePerSqFt(listing);
-      (listing as NormalizedListing & { pricePerSqFt?: number | null }).pricePerSqFt = psf ?? undefined;
+      // PSF is recomputed centrally by the ingest pipeline (saveListing), never trusted from the feed.
       return { ok: true, errors: [] };
     }
     return { ok: false, errors: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) };

@@ -1,0 +1,5 @@
+Seeding Indore Property Finder…
+Localities seeded: 31
+Connectors registered: 10
+Admin user ensured: admin@localhost (dev password 'change-me-admin' — change in production!)
+Seed complete. NOTE: no property listings are created by seed — connect a permitted source or import CSV/JSON.

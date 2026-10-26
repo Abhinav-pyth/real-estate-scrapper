@@ -86,7 +86,7 @@ export function detectDuplicates(a: DupInput, b: DupInput): DupResult {
 
   let score = 0;
   for (const [k, w] of Object.entries(WEIGHTS)) {
-    if ((signals as Record<string, boolean>)[k]) score += w;
+    if ((signals as unknown as Record<string, boolean>)[k]) score += w;
   }
   score = Math.min(1, score);
 
