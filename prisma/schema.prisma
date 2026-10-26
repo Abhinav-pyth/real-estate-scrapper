@@ -1,0 +1,331 @@
+// Indore Property Finder — Prisma Schema
+// Production target: PostgreSQL (set DATABASE_URL to a postgresql:// connection string).
+// Local development without PostgreSQL: SQLite fallback (see docs/DATABASE.md).
+// NOTE: SQLite does not support native enums or arrays; we use String fields with
+// application-level Zod validation and JSON-string list fields for portability.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------- Users & Auth ----------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  role         String   @default("USER") // USER | ADMIN
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  savedProperties SavedProperty[]
+  savedSearches   SavedSearch[]
+  auditLogs       AdminAuditLog[]
+  sessions        Session[]
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  tokenHash    String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+}
+
+// ---------------- Geography ----------------
+
+model City {
+  id        String     @id @default(cuid())
+  name      String     @unique // "Indore"
+  district  String     @default("Indore")
+  state     String     @default("Madhya Pradesh")
+  country   String     @default("India")
+  isActive  Boolean    @default(true)
+  localities  Locality[]
+  properties  Property[]
+  createdAt DateTime   @default(now())
+}
+
+model Locality {
+  id        String   @id @default(cuid())
+  cityId    String
+  slug      String   @unique // "vijay-nagar"
+  name      String   // "Vijay Nagar"
+  aliasesJson String @default("[]") // JSON array of alternate names for matching
+  pinCodesJson String @default("[]") // JSON array of PIN codes
+  centerLat Float?   // Geocoded via Nominatim at seed time — never invented
+  centerLng Float?
+  geoPrecision String? // "locality" | null
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  city      City     @relation(fields: [cityId], references: [id])
+  properties Property[]
+
+  @@index([cityId, isActive])
+}
+
+// ---------------- Sources / Connectors ----------------
+
+model SourceConnector {
+  id              String    @id @default(cuid())
+  key             String    @unique // "ninety-nine-acres", "magicbricks", ...
+  name            String    // "99acres"
+  websiteUrl      String?
+  status          String    @default("NOT_CONFIGURED") // NOT_CONFIGURED | PERMITTED_API | PERMITTED_FEED | IMPORT_ONLY | DISABLED_BY_POLICY
+  scrapeAllowed   Boolean   @default(false) // Only true when authorized scraping confirmed
+  robotsNote      String?   // Summary of robots.txt / ToS findings
+  enabled         Boolean   @default(false)
+  rateLimitPerMin Int       @default(6)
+  maxListingsPerJob Int     @default(100)
+  scheduleCron    String?   // e.g. "0 */6 * * *"
+  configJson      String    @default("{}") // connector-specific config (API keys referenced by env var NAME, never stored here)
+  lastSyncAt      DateTime?
+  lastError       String?
+  listingsCount   Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  properties PropertySource[]
+  jobs       ScrapingJob[]
+}
+
+model PropertySource {
+  id           String   @id @default(cuid())
+  propertyId   String
+  connectorId  String
+  externalId   String?   // source listing ID
+  canonicalUrl String    // original listing URL — always preserved
+  rawTitle     String?
+  firstSeenAt  DateTime @default(now())
+  lastCheckedAt DateTime @default(now())
+  availability String   @default("ACTIVE") // ACTIVE | STALE | UNAVAILABLE_AT_SOURCE | REMOVED_BY_SOURCE | PENDING_VERIFICATION
+  rawDataJson  String?   // last raw payload snapshot for auditing
+  property     Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  connector    SourceConnector @relation(fields: [connectorId], references: [id])
+
+  @@unique([connectorId, externalId])
+  @@index([propertyId])
+  @@index([canonicalUrl])
+}
+
+// ---------------- Properties ----------------
+
+model Property {
+  id                String   @id @default(cuid())
+
+  titleNormalized   String
+  titleOriginal     String?
+  transactionType   String    // SALE | RENT | COMMERCIAL_SALE | COMMERCIAL_RENT
+  propertyType      String    // APARTMENT | INDEPENDENT_HOUSE | VILLA | RESIDENTIAL_PLOT | COMMERCIAL_PLOT | OFFICE_SPACE | SHOP | WAREHOUSE | INDUSTRIAL | AGRICULTURAL_LAND
+  price             Int?      // asking price in whole INR
+  currency          String    @default("INR")
+  rentFrequency     String?   // MONTHLY | YEARLY (for rent listings)
+  carpetArea        Float?
+  builtUpArea       Float?
+  superBuiltUpArea  Float?
+  areaUnit          String?   // SQFT | SQYD | SQUARE_METER | GUNTHA | BIGHA — preserve source definition
+  pricePerSqFt      Float?    // computed only when compatible area exists
+  bedrooms          Int?
+  bathrooms         Int?
+  furnishing        String?   // FURNISHED | SEMI_FURNISHED | UNFURNISHED | NA
+  floorNumber       Int?
+  totalFloors       Int?
+  projectName       String?
+  builderName       String?
+  streetOrRoad      String?
+  pinCode           String?
+  description       String?   // short factual excerpt only where republication is permitted
+  constructionStatus String?  // READY_TO_MOVE | UNDER_CONSTRUCTION | NEWLY_BUILT | NA
+  possessionDate    String?
+  reraNumber        String?
+  amenitiesJson     String    @default("[]")
+  parkingAvailable  Boolean?
+  liftAvailable     Boolean?
+  gatedCommunity    Boolean?
+
+  lat               Float?    // NEVER invented — only from authorized geocoding or source-provided data
+  lng               Float?
+  coordPrecision    String?   // EXACT | LOCALITY_APPROXIMATE | NONE
+  geoConfidence     Float?    // 0..1
+  localityId        String?
+  cityId            String
+
+  sourcePublishedAt DateTime?
+  firstDiscoveredAt DateTime  @default(now())
+  lastCheckedAt     DateTime  @default(now())
+  lastUpdatedAt     DateTime  @default(now())
+  availability      String    @default("ACTIVE") // ACTIVE | STALE | UNAVAILABLE_AT_SOURCE | REMOVED_BY_SOURCE | PENDING_VERIFICATION
+  missingSinceCount Int       @default(0) // consecutive syncs where listing was absent
+  completenessScore Int       @default(0) // 0-100 data quality score
+  verificationStatus String   @default("UNVERIFIED") // UNVERIFIED | METADATA_CHECKED | VERIFIED
+  isFeatured        Boolean   @default(false) // clearly-labeled sponsored placement flag
+  featuredLabel     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  city       City        @relation(fields: [cityId], references: [id])
+  locality   Locality?   @relation(fields: [localityId], references: [id])
+  sources    PropertySource[]
+  images     PropertyImage[]
+  observations PropertyObservation[]
+  savedBy    SavedProperty[]
+  duplicateCandidatesAsA DuplicateCandidate[] @relation("dupA")
+  duplicateCandidatesAsB DuplicateCandidate[] @relation("dupB")
+
+  @@index([cityId, transactionType])
+  @@index([localityId])
+  @@index([propertyType])
+  @@index([price])
+  @@index([bedrooms])
+  @@index([availability])
+  @@index([lat, lng])
+  @@index([lastCheckedAt])
+}
+
+model PropertyImage {
+  id         String   @id @default(cuid())
+  propertyId String
+  url        String   // remote URL reference only — not downloaded/rehosted
+  width      Int?
+  height     Int?
+  sortOrder  Int      @default(0)
+  rightsNote String?  // republication permission status
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+}
+
+model PropertyObservation {
+  id         String   @id @default(cuid())
+  propertyId String
+  observedAt DateTime @default(now())
+  price      Int?
+  availability String?
+  changeType String   // DISCOVERED | PRICE_DECREASE | PRICE_INCREASE | UPDATED | UNCHANGED | MISSING | REMOVED
+  note       String?
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, observedAt])
+}
+
+// ---------------- Deduplication ----------------
+
+model DuplicateCandidate {
+  id          String   @id @default(cuid())
+  propertyAId String
+  propertyBId String
+  confidence  Float    // 0..1
+  classification String // CONFIRMED | LIKELY | POSSIBLE
+  signalsJson String   @default("{}") // which signals fired
+  status      String   @default("OPEN") // OPEN | MERGED | REJECTED
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  propertyA   Property @relation("dupA", fields: [propertyAId], references: [id], onDelete: Cascade)
+  propertyB   Property @relation("dupB", fields: [propertyBId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyAId, propertyBId])
+  @@index([status, confidence])
+}
+
+// ---------------- User features ----------------
+
+model SavedProperty {
+  id         String   @id @default(cuid())
+  userId     String
+  propertyId String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, propertyId])
+}
+
+model SavedSearch {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String?
+  paramsJson String  // serialized validated search params
+  createdAt DateTime @default(now())
+  lastRunAt DateTime?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------- Ingestion ops ----------------
+
+model ScrapingJob {
+  id          String   @id @default(cuid())
+  connectorId String
+  kind        String   @default("SYNC") // SYNC | CSV_IMPORT | JSON_IMPORT
+  status      String   @default("QUEUED") // QUEUED | RUNNING | SUCCEEDED | FAILED | CANCELLED
+  triggeredBy String   @default("SYSTEM") // SYSTEM | ADMIN:<userId>
+  paramsJson  String   @default("{}")
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  newCount    Int      @default(0)
+  updatedCount Int     @default(0)
+  unchangedCount Int   @default(0)
+  unavailableCount Int @default(0)
+  errorCount  Int      @default(0)
+  attempts    Int      @default(0)
+  lastError   String?
+  connector   SourceConnector @relation(fields: [connectorId], references: [id])
+  logs        ScrapingJobLog[]
+
+  @@index([connectorId, status])
+  @@index([status, startedAt])
+}
+
+model ScrapingJobLog {
+  id     String   @id @default(cuid())
+  jobId  String
+  level  String   // INFO | WARN | ERROR
+  message String
+  metaJson String @default("{}")
+  createdAt DateTime @default(now())
+  job    ScrapingJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
+}
+
+model DataImport {
+  id          String   @id @default(cuid())
+  connectorKey String?
+  fileName    String
+  format      String   // CSV | JSON
+  status      String   @default("COMPLETED")
+  totalRows   Int      @default(0)
+  importedRows Int     @default(0)
+  skippedDuplicates Int @default(0)
+  invalidRows Int      @default(0)
+  errorsJson  String   @default("[]")
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model AdminAuditLog {
+  id       String   @id @default(cuid())
+  userId   String?
+  action   String   // e.g. "source.toggle", "property.edit", "duplicate.merge"
+  entity   String?
+  entityId String?
+  detailJson String @default("{}")
+  ip       String?
+  createdAt DateTime @default(now())
+  user     User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+}
